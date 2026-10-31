@@ -51,6 +51,8 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         _settings = SettingsStore.Load();
+        // 首次运行（无设置文件）跟随系统深浅色
+        if (!SettingsStore.LoadedFromFile) _settings.DarkTheme = SystemPrefersDark();
         ApplyTheme(_settings.DarkTheme);
         if (!double.IsNaN(_settings.Width) && _settings.Width >= MinWidth)
         {
@@ -134,32 +136,43 @@ public partial class MainWindow : Window
     }
 
     // ---------- 主题 ----------
+    private static bool SystemPrefersDark()
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+            return key?.GetValue("AppsUseLightTheme") is int v && v == 0;
+        }
+        catch { return false; }
+    }
+
     private void ApplyTheme(bool dark)
     {
         _dark = dark;
         var res = Application.Current.Resources;
         (string key, string light, string darkColor)[] palette =
         {
-            ("Brush.Window",      "#F4FAFB", "#0B1416"),
-            ("Brush.Panel",       "#FFFFFF", "#101D20"),
-            ("Brush.Text",        "#17323A", "#D7F2F6"),
-            ("Brush.SubText",     "#5E7C84", "#7FA6AD"),
-            ("Brush.Border",      "#C6E2E7", "#1E3A40"),
-            ("Brush.Accent",      "#0891B2", "#22D3EE"),
-            ("Brush.AccentSoft",  "#D5F2F7", "#123A44"),
-            ("Brush.ButtonBg",    "#FFFFFF", "#15272B"),
-            ("Brush.ButtonHover", "#E9F7FA", "#1B343A"),
-            ("Brush.LogBg",       "#EEF7F9", "#06100F"),
-            ("Brush.HeaderBg",    "#EAF5F7", "#142428"),
-            ("Brush.HoverBg",     "#DFF1F5", "#182F34"),
-            ("Brush.AltRow",      "#F6FBFC", "#0D191C"),
-            ("Brush.TitleBg",     "#0891B2", "#0E3E4C"),
-            ("Brush.TitleHover",  "#2FA9C6", "#155063"),
-            ("Brush.TitlePressed","#1B86A2", "#123F4E"),
+            // Windows 11 资源管理器风格：中性灰、系统蓝、同色标题栏
+            ("Brush.Window",      "#F3F3F3", "#202020"),
+            ("Brush.Panel",       "#FFFFFF", "#272727"),
+            ("Brush.Text",        "#1B1B1B", "#F2F2F2"),
+            ("Brush.SubText",     "#616161", "#A6A6A6"),
+            ("Brush.Border",      "#E5E5E5", "#3B3B3B"),
+            ("Brush.Accent",      "#0067C0", "#4CC2FF"),
+            ("Brush.AccentSoft",  "#CCE8FF", "#0C5A8C"),
+            ("Brush.ButtonPressed","#E9E9E9", "#3A3A3A"),
+            ("Brush.LogBg",       "#FFFFFF", "#272727"),
+            ("Brush.HeaderBg",    "#FFFFFF", "#272727"),
+            ("Brush.HoverBg",     "#F1F1F1", "#323232"),
+            ("Brush.AltRow",      "#FFFFFF", "#272727"),
+            ("Brush.TitleBg",     "#F3F3F3", "#202020"),
+            ("Brush.TitleHover",  "#E5E5E5", "#3D3D3D"),
+            ("Brush.TitlePressed","#D5D5D5", "#2E2E2E"),
         };
         foreach (var (key, light, darkColor) in palette)
             res[key] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(dark ? darkColor : light));
-        Title = dark ? $"FoldZip v{Version}（深色）" : $"FoldZip v{Version}";
+        Title = $"FoldZip v{Version}";
     }
 
     // ---------- 界面状态 ----------
@@ -182,7 +195,7 @@ public partial class MainWindow : Window
         BtnExtractAll.IsEnabled = browsing;
         BtnExtractSelected.IsEnabled = browsing && SelectedCount > 0;
         BtnCancel.IsEnabled = _cts != null;
-        Title = (_dark ? "FoldZip（深色）" : "FoldZip") + $" v{Version}"
+        Title = $"FoldZip v{Version}"
             + (browsing ? $" — {Path.GetFileName(_archivePath)}" : "");
     }
 

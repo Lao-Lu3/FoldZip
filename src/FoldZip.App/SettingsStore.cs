@@ -18,12 +18,22 @@ internal static class SettingsStore
     private static readonly string FilePath =
         System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FoldZip", "settings.json");
 
+    /// <summary>上次 Load 是否真的从磁盘读到设置（用于判断首次运行）。</summary>
+    public static bool LoadedFromFile { get; private set; }
+
     public static AppSettings Load()
     {
         try
         {
             if (File.Exists(FilePath))
-                return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath)) ?? new AppSettings();
+            {
+                var s = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath));
+                if (s != null)
+                {
+                    LoadedFromFile = true;
+                    return s;
+                }
+            }
         }
         catch { }
         return new AppSettings();
