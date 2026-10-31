@@ -2,7 +2,7 @@
 
 免费开源的 Windows 压缩工具（C# / WPF）。
 
-![平台](https://img.shields.io/badge/platform-Windows%2010%2F11-blue) ![协议](https://img.shields.io/badge/license-MIT-green) ![版本](https://img.shields.io/badge/version-0.1.0-orange)
+**平台**：Windows 10/11 · **协议**：MIT · **版本**：v0.1.0
 
 ## 特性
 

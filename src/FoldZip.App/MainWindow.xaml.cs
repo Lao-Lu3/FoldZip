@@ -67,6 +67,22 @@ public partial class MainWindow : Window
         LogBox.ScrollToEnd();
     }
 
+    // ---------- 标题栏窗口控制 ----------
+    private void BtnMin_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+
+    private void BtnMax_Click(object sender, RoutedEventArgs e)
+        => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+
+    private void BtnClose_Click(object sender, RoutedEventArgs e) => Close();
+
+    private void Window_StateChanged(object? sender, EventArgs e)
+    {
+        // 最大化时内容会越出屏幕边缘（无边框窗口特性），补内边距
+        bool max = WindowState == WindowState.Maximized;
+        RootPanel.Margin = max ? new Thickness(7) : new Thickness(0);
+        BtnMax.Content = max ? "\uE923" : "\uE922"; // 还原 / 最大化 图标
+    }
+
     // ---------- 主题 ----------
     private void ApplyTheme(bool dark)
     {
@@ -87,6 +103,9 @@ public partial class MainWindow : Window
             ("Brush.HeaderBg",    "#EAF5F7", "#142428"),
             ("Brush.HoverBg",     "#DFF1F5", "#182F34"),
             ("Brush.AltRow",      "#F6FBFC", "#0D191C"),
+            ("Brush.TitleBg",     "#0891B2", "#0E3E4C"),
+            ("Brush.TitleHover",  "#2FA9C6", "#155063"),
+            ("Brush.TitlePressed","#1B86A2", "#123F4E"),
         };
         foreach (var (key, light, darkColor) in palette)
             res[key] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(dark ? darkColor : light));
