@@ -1,0 +1,53 @@
+name: Build Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号（如 v0.1.0）'
+        required: true
+        default: 'v0.1.0'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: 内核自测
+        run: dotnet run --project src/FoldZip.SelfTest -c Release
+
+      - name: 发布便携版（自包含）
+        run: dotnet publish src/FoldZip.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish/portable
+
+      - name: 发布 lite 版（框架依赖）
+        run: dotnet publish src/FoldZip.App -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o publish/lite
+
+      - name: 打包并上传 Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VER: ${{ github.event.inputs.version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force -Path engines, out-p, out-l | Out-Null
+          Invoke-WebRequest -Uri "https://www.7-zip.org/a/7zr.exe" -OutFile "engines/7z.exe"
+          Set-Content -Path "engines/关于本目录.txt" -Encoding UTF8 -Value "engines/7z.exe 来自 7-Zip 官方 7zr.exe（https://www.7-zip.org），用于支持 7z / RAR 等格式的读取。"
+
+          Copy-Item publish/portable/FoldZip.exe out-p/
+          Copy-Item engines out-p/ -Recurse
+          Compress-Archive -Path "out-p/*" -DestinationPath "FoldZip-$env:VER-portable.zip"
+
+          Set-Content -Path "out-l/说明.txt" -Encoding UTF8 -Value "FoldZip lite：需先安装 .NET 10 Desktop Runtime（https://dotnet.microsoft.com/download/dotnet/10.0/runtime）。安装后双击 FoldZip.exe 即可。engines 目录已附带 7z 引擎。"
+          Copy-Item publish/lite/FoldZip.exe out-l/
+          Copy-Item engines out-l/ -Recurse
+          Compress-Archive -Path "out-l/*" -DestinationPath "FoldZip-$env:VER-lite.zip"
+
+          gh release upload "$env:VER" "FoldZip-$env:VER-portable.zip" "FoldZip-$env:VER-lite.zip" --clobber --repo "$env:GITHUB_REPOSITORY"
+          Write-Host "上传完成"
