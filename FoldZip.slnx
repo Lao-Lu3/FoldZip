@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FoldZip.App/FoldZip.App.csproj" />
+    <Project Path="src/FoldZip.Core/FoldZip.Core.csproj" />
+    <Project Path="src/FoldZip.SelfTest/FoldZip.SelfTest.csproj" />
+  </Folder>
+</Solution>
