@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using FoldZip.Core;
 using Microsoft.Win32;
@@ -24,6 +25,9 @@ public partial class MainWindow : Window
         public int Index { get; init; } = -1;          // 已打开压缩包时的条目索引
         public string? SourcePath { get; init; }       // 新建模式时的源文件路径
         public bool IsDir { get; init; }
+        public string IconText { get; init; } = "\uE7C3"; // 文件
+        public long SizeVal { get; init; }
+        public DateTime ModifiedVal { get; init; }
     }
 
     private sealed class StagedItem
@@ -39,11 +43,26 @@ public partial class MainWindow : Window
     private readonly List<StagedItem> _staged = new();
     private CancellationTokenSource? _cts;
     private bool _dark;
+    private readonly AppSettings _settings;
+    private string? _sortKey;
+    private bool _sortDesc;
 
     public MainWindow()
     {
         InitializeComponent();
-        ApplyTheme(dark: false);
+        _settings = SettingsStore.Load();
+        ApplyTheme(_settings.DarkTheme);
+        if (!double.IsNaN(_settings.Width) && _settings.Width >= MinWidth)
+        {
+            Width = _settings.Width;
+            Height = _settings.Height;
+            if (!double.IsNaN(_settings.Left) && Math.Abs(_settings.Left) < 10000)
+            {
+                Left = _settings.Left;
+                Top = _settings.Top;
+            }
+        }
+        if (_settings.Maximized) WindowState = WindowState.Maximized;
     }
 
     private void Window_Loaded(object sender, RoutedEventArgs e)
@@ -65,6 +84,37 @@ public partial class MainWindow : Window
         }
         LogBox.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}\n");
         LogBox.ScrollToEnd();
+    }
+
+    // ---------- 设置持久化与退出保护 ----------
+    private void SaveSettings()
+    {
+        _settings.DarkTheme = _dark;
+        if (WindowState == WindowState.Normal)
+        {
+            _settings.Left = Left;
+            _settings.Top = Top;
+            _settings.Width = Width;
+            _settings.Height = Height;
+            _settings.Maximized = false;
+        }
+        else
+        {
+            _settings.Maximized = WindowState == WindowState.Maximized;
+        }
+        SettingsStore.Save(_settings);
+    }
+
+    private void Window_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (_staged.Count > 0)
+        {
+            var r = MessageBox.Show(this,
+                $"新建模式还有 {_staged.Count} 个未保存的文件，确定退出吗？",
+                "FoldZip", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (r != MessageBoxResult.Yes) { e.Cancel = true; return; }
+        }
+        SaveSettings();
     }
 
     // ---------- 标题栏窗口控制 ----------
@@ -113,13 +163,16 @@ public partial class MainWindow : Window
     }
 
     // ---------- 界面状态 ----------
+    private int SelectedCount => ArchiveList.SelectedItems.Count;
+
     private void UpdateUi()
     {
         bool browsing = _archive != null;
+        string sel = SelectedCount > 0 ? $"，已选中 {SelectedCount} 项" : "";
         StatusText.Text = browsing
-            ? $"已打开：{Path.GetFileName(_archivePath)}（{_archive!.Entries.Count} 个条目）"
+            ? $"已打开：{Path.GetFileName(_archivePath)}（{_archive!.Entries.Count} 个条目{sel}）"
             : _staged.Count > 0
-                ? $"新建模式：已添加 {_staged.Count} 项，点「保存压缩包」生成文件"
+                ? $"新建模式：已添加 {_staged.Count} 项，点「保存压缩包」生成文件{sel}"
                 : "就绪";
 
         BtnSave.IsEnabled = !browsing && _staged.Count > 0;
@@ -127,7 +180,7 @@ public partial class MainWindow : Window
         BtnAddFolder.IsEnabled = !browsing;
         BtnRemove.IsEnabled = !browsing && _staged.Count > 0;
         BtnExtractAll.IsEnabled = browsing;
-        BtnExtractSelected.IsEnabled = browsing && ArchiveList.SelectedItems.Count > 0;
+        BtnExtractSelected.IsEnabled = browsing && SelectedCount > 0;
         BtnCancel.IsEnabled = _cts != null;
         Title = (_dark ? "FoldZip（深色）" : "FoldZip") + $" v{Version}"
             + (browsing ? $" — {Path.GetFileName(_archivePath)}" : "");
@@ -142,6 +195,10 @@ public partial class MainWindow : Window
             {
                 Index = e.Index,
                 Name = e.Name,
+                IconText = e.IsDirectory ? "\uE8B7" : "\uE7C3",
+                IsDir = e.IsDirectory,
+                SizeVal = e.Size,
+                ModifiedVal = e.Modified,
                 SizeText = e.IsDirectory ? "目录" : e.Size < 0 ? "—" : HumanSize(e.Size),
                 PackedText = e.CompressedSize < 0 ? "—" : HumanSize(e.CompressedSize),
                 ModifiedText = e.Modified == default ? "—" : e.Modified.ToString("yyyy-MM-dd HH:mm"),
@@ -154,17 +211,65 @@ public partial class MainWindow : Window
             {
                 Index = i,
                 Name = s.EntryName,
+                IconText = s.IsDir ? "\uE8B7" : "\uE7C3",
+                IsDir = s.IsDir,
+                SizeVal = s.Size,
                 SizeText = s.IsDir ? "目录" : HumanSize(s.Size),
                 PackedText = "—",
                 ModifiedText = "—",
                 MethodText = "待写入",
                 SourcePath = s.SourcePath,
-                IsDir = s.IsDir,
             }).ToList();
         }
+
+        rows = SortRows(rows);
         ArchiveList.ItemsSource = rows;
         EmptyHint.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    private List<EntryRow> SortRows(List<EntryRow> rows)
+    {
+        if (_sortKey == null) return rows;
+        return _sortKey switch
+        {
+            "Size" => _sortDesc ? rows.OrderByDescending(r => r.SizeVal).ToList()
+                                : rows.OrderBy(r => r.SizeVal).ToList(),
+            "Packed" => _sortDesc ? rows.OrderByDescending(r => r.PackedText).ToList()
+                                  : rows.OrderBy(r => r.PackedText).ToList(),
+            "Modified" => _sortDesc ? rows.OrderByDescending(r => r.ModifiedVal).ToList()
+                                    : rows.OrderBy(r => r.ModifiedVal).ToList(),
+            "Method" => _sortDesc ? rows.OrderByDescending(r => r.MethodText, StringComparer.CurrentCulture).ToList()
+                                  : rows.OrderBy(r => r.MethodText, StringComparer.CurrentCulture).ToList(),
+            _ => _sortDesc ? rows.OrderByDescending(r => r.Name, StringComparer.CurrentCulture).ToList()
+                           : rows.OrderBy(r => r.Name, StringComparer.CurrentCulture).ToList(),
+        };
+    }
+
+    private void ColHeader_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is GridViewColumnHeader h && h.Tag is string key)
+        {
+            if (_sortKey == key) _sortDesc = !_sortDesc;
+            else { _sortKey = key; _sortDesc = false; }
+            RefreshList();
+            Log($"已按「{h.Content}」{(_sortDesc ? "降序" : "升序")}排列。");
+        }
+    }
+
+    private void MenuCopyName_Click(object sender, RoutedEventArgs e)
+    {
+        var names = ArchiveList.SelectedItems.Cast<EntryRow>().Select(r => r.Name).ToList();
+        if (names.Count == 0) { Log("提示：请先选中条目。"); return; }
+        try
+        {
+            Clipboard.SetText(string.Join("\n", names));
+            Log($"已复制 {names.Count} 个名称。");
+        }
+        catch (Exception ex) { Log($"[错误] 复制失败：{ex.Message}"); }
+    }
+
+    private void ArchiveList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        => UpdateUi();
 
     private static string HumanSize(long bytes)
     {
@@ -391,7 +496,11 @@ public partial class MainWindow : Window
             _ => "未知",
         })}）…");
         SetBusy(true, "正在解压…");
-        var progress = new Progress<double>(v => Progress.Value = v * 100);
+        var progress = new Progress<double>(v =>
+        {
+            Progress.Value = v * 100;
+            ProgressText.Text = $"{v * 100:F0}%";
+        });
         try
         {
             await Task.Run(() => _archive.ExtractEntries(indexes, dest, progress, _cts.Token, s => Log(s)));
@@ -409,6 +518,7 @@ public partial class MainWindow : Window
         {
             _cts?.Dispose();
             _cts = null;
+            ProgressText.Text = "";
             SetBusy(false);
         }
     }

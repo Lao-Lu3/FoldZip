@@ -8,7 +8,8 @@
         Background="{DynamicResource Brush.Window}"
         AllowDrop="True"
         Drop="Window_Drop" DragOver="Window_DragOver"
-        Loaded="Window_Loaded" StateChanged="Window_StateChanged">
+        Loaded="Window_Loaded" StateChanged="Window_StateChanged"
+        Closing="Window_Closing">
 
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="40" ResizeBorderThickness="6"
@@ -52,7 +53,7 @@
             </Setter>
         </Style>
 
-        <!-- 标题栏小按钮（常规） -->
+        <!-- 标题栏小按钮 -->
         <Style x:Key="CapBtn" TargetType="Button">
             <Setter Property="Width" Value="44"/>
             <Setter Property="Height" Value="30"/>
@@ -80,7 +81,6 @@
             </Setter>
         </Style>
 
-        <!-- 标题栏关闭按钮：悬停变红 -->
         <Style x:Key="CapBtnClose" TargetType="Button" BasedOn="{StaticResource CapBtn}">
             <Setter Property="Template">
                 <Setter.Value>
@@ -127,7 +127,37 @@
             <Setter Property="Foreground" Value="{DynamicResource Brush.SubText}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}"/>
             <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="Cursor" Value="Hand"/>
         </Style>
+
+        <!-- 名称列：图标 + 文件名 -->
+        <DataTemplate x:Key="NameCell">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock FontFamily="Segoe MDL2 Assets" Text="{Binding IconText}" FontSize="14"
+                           Margin="0,0,8,0" VerticalAlignment="Center">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.SubText}"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsDir}" Value="True">
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+                <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                           ToolTip="{Binding Name}"/>
+            </StackPanel>
+        </DataTemplate>
+
+        <!-- 右对齐数值列 -->
+        <DataTemplate x:Key="SizeCell">
+            <TextBlock Text="{Binding SizeText}" TextAlignment="Right" VerticalAlignment="Center"/>
+        </DataTemplate>
+        <DataTemplate x:Key="PackedCell">
+            <TextBlock Text="{Binding PackedText}" TextAlignment="Right" VerticalAlignment="Center"/>
+        </DataTemplate>
     </Window.Resources>
 
     <DockPanel x:Name="RootPanel" Margin="0">
@@ -191,14 +221,33 @@
                               SelectionMode="Extended"
                               AlternationCount="2"
                               Background="Transparent"
-                              BorderThickness="0">
+                              BorderThickness="0"
+                              SelectionChanged="ArchiveList_SelectionChanged">
+                        <ListView.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="解压选中…" Click="BtnExtractSelected_Click"/>
+                                <MenuItem Header="复制名称" Click="MenuCopyName_Click"/>
+                                <Separator/>
+                                <MenuItem Header="移除选中" Click="BtnRemove_Click"/>
+                            </ContextMenu>
+                        </ListView.ContextMenu>
                         <ListView.View>
                             <GridView>
-                                <GridViewColumn Header="名称" Width="460" DisplayMemberBinding="{Binding Name}"/>
-                                <GridViewColumn Header="大小" Width="96" DisplayMemberBinding="{Binding SizeText}"/>
-                                <GridViewColumn Header="压缩后" Width="96" DisplayMemberBinding="{Binding PackedText}"/>
-                                <GridViewColumn Header="修改时间" Width="150" DisplayMemberBinding="{Binding ModifiedText}"/>
-                                <GridViewColumn Header="方式" Width="130" DisplayMemberBinding="{Binding MethodText}"/>
+                                <GridViewColumn Width="460" CellTemplate="{StaticResource NameCell}">
+                                    <GridViewColumnHeader Tag="Name" Click="ColHeader_Click">名称</GridViewColumnHeader>
+                                </GridViewColumn>
+                                <GridViewColumn Width="96" CellTemplate="{StaticResource SizeCell}">
+                                    <GridViewColumnHeader Tag="Size" Click="ColHeader_Click">大小</GridViewColumnHeader>
+                                </GridViewColumn>
+                                <GridViewColumn Width="96" CellTemplate="{StaticResource PackedCell}">
+                                    <GridViewColumnHeader Tag="Packed" Click="ColHeader_Click">压缩后</GridViewColumnHeader>
+                                </GridViewColumn>
+                                <GridViewColumn Width="150" DisplayMemberBinding="{Binding ModifiedText}">
+                                    <GridViewColumnHeader Tag="Modified" Click="ColHeader_Click">修改时间</GridViewColumnHeader>
+                                </GridViewColumn>
+                                <GridViewColumn Width="130" DisplayMemberBinding="{Binding MethodText}">
+                                    <GridViewColumnHeader Tag="Method" Click="ColHeader_Click">方式</GridViewColumnHeader>
+                                </GridViewColumn>
                             </GridView>
                         </ListView.View>
                     </ListView>
@@ -219,8 +268,12 @@
                                  Background="{DynamicResource Brush.LogBg}"
                                  Foreground="{DynamicResource Brush.Accent}"
                                  BorderThickness="0"/>
-                    <TextBlock x:Name="StatusText" Text="就绪" FontSize="12" Margin="2,8,0,0"
-                               Foreground="{DynamicResource Brush.SubText}"/>
+                    <DockPanel Margin="2,8,0,0">
+                        <TextBlock x:Name="StatusText" Text="就绪" FontSize="12"
+                                   Foreground="{DynamicResource Brush.SubText}"/>
+                        <TextBlock x:Name="ProgressText" Text="" FontSize="12" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Brush.Accent}" HorizontalAlignment="Right"/>
+                    </DockPanel>
                     <DockPanel Margin="2,10,0,6">
                         <TextBlock Text="运行日志" FontSize="12" FontWeight="SemiBold"
                                    Foreground="{DynamicResource Brush.SubText}" VerticalAlignment="Center"/>
